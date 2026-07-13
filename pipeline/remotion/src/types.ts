@@ -15,14 +15,14 @@ export type CaptionStyle = {
   readonly wordsPerGroup: number;
   readonly fontSizePx: number;
   readonly bottomOffsetPx: number;
-  // "top" = compact word near the top edge; "bottom" = classic placement.
+  // "top" = kisa-style small word near the top edge; "bottom" = legacy placement.
   readonly position: "bottom" | "top";
   readonly topOffsetPx: number;
   readonly activeColor: string;
   readonly idleColor: string;
   readonly outlineColor: string;
   readonly outlinePx: number;
-  // Single-word mode: a shown group is held at least this many frames so
+  // Kisa single-word mode: a shown group is held at least this many frames so
   // fast/short words never strobe (later groups shift slightly later).
   readonly minDisplayFrames: number;
   // Normalized (lowercase, alnum-only) words painted in activeColor; any word

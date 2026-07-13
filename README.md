@@ -1,111 +1,160 @@
-# Agent Shorts Kit
+# Agent Shorts Kit — production pipeline
 
-An AI-provider-neutral production kit for vertical Shorts. Your AI agent makes
-the creative decisions and assets; this repository validates the contract,
-requires human storyboard approval, and renders a reproducible 9:16 video.
+The reproducible pipeline used to produce illustrated vertical Shorts:
 
-No API key is bundled or required. Generated episodes, OAuth files, tokens,
-music, mascot assets and `.env` files are git-ignored.
+```text
+research + script
+      ↓
+episode.json + 16-beat bits.json
+      ↓
+one Gemini storyboard contact sheet
+      ↓
+explicit human approval bound to SHA-256
+      ↓
+Gemini 3.1 Flash Image scenes with identity/style/location references
+      ↓
+pixel-locked 1080×1920 scene install
+      ↓
+ElevenLabs/Edge TTS + word timestamps
+      ↓
+Remotion: narration-synced cuts, burned captions, SFX, motion, thumbnail
+      ↓
+out/final.mp4
+```
 
-An optional non-interactive script command can be connected with
-`SHORTS_AGENT_COMMAND="your-agent-command"`; it receives the prompt on stdin
-and must print episode JSON on stdout. The documented filesystem workflow is
-more portable and works with interactive coding agents.
-
-## What it gives you
-
-- a machine-readable episode contract;
-- an agent-friendly `request.json` and `status --json` interface;
-- a mandatory `board -> approve -> render` safety gate;
-- word-timed captions, motion, transitions and optional SFX/music;
-- a Remotion renderer that produces `episodes/<slug>/out/final.mp4`;
-- optional provider adapters that only run with the user's own credentials.
+No key, Google account, episode, unpublished media or OAuth token is included.
 
 ## Requirements
 
 - Python 3.11+
 - Node.js 20+
-- `ffmpeg` and `ffprobe`
+- FFmpeg and FFprobe
+- Google Gemini API key, or a Google Cloud project with Vertex AI access
+- optional ElevenLabs key for the production voice
 
 ## Install
 
 ```bash
+git clone https://github.com/4ubak/agent-shorts-kit.git
+cd agent-shorts-kit
 python3 -m venv .venv
-./.venv/bin/pip install -r pipeline/requirements.txt
+./.venv/bin/pip install -r pipeline/requirements-ai.txt
 npm --prefix pipeline/remotion ci
-./.venv/bin/python shorts.py doctor
+cp .env.example pipeline/.env
 ```
 
-The default file contains only renderer/validation dependencies. To use the
-optional built-in TTS, alignment, FAL and parallax adapters, install
-`pipeline/requirements-ai.txt`. The YouTube uploader has its own
-`pipeline/requirements-youtube.txt`.
+## Connect Google Gemini
 
-## Bring your own AI agent
+The simplest mode uses a key from [Google AI Studio](https://aistudio.google.com/apikey):
+
+```env
+# pipeline/.env
+GEMINI_API_KEY=your_key
+ELEVENLABS_API_KEY=your_optional_voice_key
+```
+
+Keep this default in `pipeline/production.json`:
+
+```json
+"image_provider": "gemini",
+"image_model": "gemini-3.1-flash-image"
+```
+
+For Vertex AI credits instead, set `image_provider` to `vertex`, authenticate
+`gcloud`, and configure:
+
+```env
+GOOGLE_CLOUD_PROJECT=your-project-id
+GOOGLE_CLOUD_ACCOUNT=you@example.com
+```
+
+The code never stores access tokens; Vertex requests obtain a short-lived token
+from `gcloud auth print-access-token`.
+
+## Add identity and style references
+
+Place your owned reference files under `references/` and list them in
+`pipeline/production.json`:
+
+```json
+"reference_images": [
+  "references/identity-sheet.png",
+  "references/style-frame-1.png",
+  "references/style-frame-2.png"
+]
+```
+
+These files are ignored by git by default.
+
+For the same finishing layers as the production setup, add owner-cleared assets:
+
+```text
+assets/music/track.mp3
+assets/channel/avatar.png
+assets/channel/endcard_voice.mp3
+```
+
+The renderer skips missing music/end-card media without failing. SFX are
+synthesized deterministically by the pipeline.
+
+## Produce one Short
+
+Create the episode workspace:
 
 ```bash
 ./.venv/bin/python shorts.py init \
-  --topic "Why the shortest war lasted only 38 minutes" \
-  --slug shortest-war
+  --topic "Your verified story" \
+  --slug ep001-your-story \
+  --scenes 16
 ```
 
-Then ask any coding/AI agent:
+Ask your AI coding agent to read `AGENTS.md` and replace every placeholder in
+`episodes/ep001-your-story/bits.json` and `episode.json`.
 
-> Read AGENTS.md, complete episode `shortest-war`, and stop after creating the
-> storyboard. Do not approve or render it for me.
-
-The agent fills these owner-local files:
-
-```text
-episodes/shortest-war/
-  request.json
-  episode.json
-  voice.mp3
-  words.json
-  scenes/scene_1.png ... scene_N.png
-```
-
-If the voice provider did not return word timestamps, create safe uniform
-timings from the known narration and measured audio duration:
+Generate one storyboard first:
 
 ```bash
-./.venv/bin/python shorts.py captions --slug shortest-war
+./.venv/bin/python shorts.py board --slug ep001-your-story
 ```
 
-Review and approve explicitly:
+Review `episodes/ep001-your-story/storyboard/contact-sheet.png`. Generation is
+blocked until the owner explicitly approves:
 
 ```bash
-./.venv/bin/python shorts.py board --slug shortest-war
-# open episodes/shortest-war/storyboard/contact-sheet.png
-./.venv/bin/python shorts.py approve --slug shortest-war
-./.venv/bin/python shorts.py render --slug shortest-war
+./.venv/bin/python shorts.py approve --slug ep001-your-story
+./.venv/bin/python shorts.py gen --slug ep001-your-story
+./.venv/bin/python shorts.py install --slug ep001-your-story
+./.venv/bin/python shorts.py render --slug ep001-your-story
 ```
 
-Approval is bound to the SHA-256 of the contact sheet and the exact scene
-count. Rebuilding or changing the board invalidates approval.
+The final file is `episodes/ep001-your-story/out/final.mp4`.
 
-## Useful commands
+Useful recovery commands:
 
 ```bash
-python shorts.py status --slug shortest-war --json
-python shorts.py validate --slug shortest-war
-python shorts.py demo --slug demo
-python shorts.py render --slug shortest-war --force
+python shorts.py status --slug ep001-your-story --json
+python shorts.py gen --slug ep001-your-story --only 7,13
+python shorts.py board --slug ep001-your-story --force
+python shorts.py render --slug ep001-your-story --force
 ```
 
-`demo` creates synthetic local assets without AI or network credentials. It
-still needs installed dependencies to render the final MP4.
+Changing/replacing the storyboard invalidates approval. Regenerating selected
+scenes remains resumable and does not spend credits on existing files.
 
-## Security and publishing
+## Optional providers
 
-Uploads are intentionally separate from rendering. The optional YouTube
-uploader defaults to `private` and requires a user-created OAuth desktop file.
-Never commit `pipeline/credentials.json`, `pipeline/token.json`, `.env`, or an
-episode directory. See `SECURITY.md` before publishing a fork.
+- `--provider gemini`: Gemini Developer API and `GEMINI_API_KEY`.
+- `--provider vertex`: the same Google image family through Vertex/gcloud.
+- `--provider fal`: Nano Banana 2 through FAL and `FAL_KEY`.
+- `build_bits2.py ... animate --provider veo|fal|ws`: optional scene video.
 
-## Scope
+Every animation command has an explicit cost cap. Static scenes with
+deterministic Remotion motion are the safe default.
 
-This repository is the production engine, not a promise of viral performance.
-Users remain responsible for factual review, rights to images/music/voices,
-platform disclosure, and final publication. Third-party licenses and service
-terms are summarized in `THIRD_PARTY.md`.
+## Publishing safety
+
+YouTube upload is a separate, owner-gated command. It is never invoked by
+`shorts.py render`. Generated episodes, `.env`, OAuth credentials, tokens,
+reference images, music and large media remain git-ignored.
+
+See `SECURITY.md`, `THIRD_PARTY.md`, and `AGENTS.md` before production use.

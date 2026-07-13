@@ -1,0 +1,16 @@
+{
+  "meta": {
+    "slug": "example-short",
+    "title": "An Example Production Short",
+    "scene_count": 4,
+    "target_duration_seconds": 25,
+    "bits_dirname": "generated"
+  },
+  "world": "A consistent illustrative world with one recurring character, a fixed palette, explicit clothing and location continuity. Vertical cinematic framing, no text, logos or watermarks.",
+  "bits": [
+    {"n": 1, "vo": "Start with the impossible outcome.", "desc": "Cold-open close-up that visually reveals the surprising result."},
+    {"n": 2, "vo": "Show how the situation began.", "desc": "Wide establishing frame with the recurring character and location."},
+    {"n": 3, "vo": "Reveal the decisive action.", "desc": "Tight action frame with one clear subject and readable silhouettes."},
+    {"n": 4, "vo": "Land the final reversal.", "desc": "Resolution frame that visually echoes the opening composition."}
+  ]
+}

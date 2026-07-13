@@ -1,31 +1,37 @@
-# Instructions for AI agents
+# Production instructions for AI agents
 
-This repository uses a filesystem protocol. Do not add provider credentials to
-source files and do not approve a storyboard on behalf of the human owner.
+This repository packages a human-approved production workflow. Never put API
+keys, Google project credentials or OAuth tokens into tracked files.
 
-For an episode named `<slug>`:
+For `episodes/<slug>`:
 
-1. Read `episodes/<slug>/request.json` and `contracts/episode.schema.json`.
-2. Write `episodes/<slug>/episode.json` that satisfies the schema.
-3. Create `voice.mp3` from `episode.narration`, using credentials or tools that
-   belong to the user. Do not copy a third party's voice without permission.
-4. Prefer real word timestamps in `words.json`. If unavailable, run
-   `python shorts.py captions --slug <slug>`.
-5. Create exactly one `scenes/scene_N.png` per scene. Use 1080x1920 unless the
-   project config says otherwise. Do not place captions or watermarks inside
-   scene images.
-6. Run `python shorts.py validate --slug <slug>` and fix every error.
-7. Run `python shorts.py board --slug <slug>` and stop. Tell the human to review
-   `storyboard/contact-sheet.png`.
-8. Only after the human explicitly approves, the human (or agent in that same
-   explicit turn) may run `approve`, followed by `render`.
+1. Read `request.json`, `contracts/bits.schema.json`, and
+   `contracts/episode.schema.json`.
+2. Research the topic from reliable sources. Keep a source list in the episode
+   workspace and separate verified facts from speculation.
+3. Replace all placeholders in `episode.json`. The narration must be the exact
+   final spoken text and should fit the configured target duration.
+4. Replace all placeholders in `bits.json`. Split narration into 12–20 short,
+   sequential visual beats. Every `vo` must be a verbatim contiguous segment of
+   narration and all beats together must cover it in order.
+5. Make `world` explicit: recurring identity, clothing, props, location,
+   palette, period, prohibited characters/objects and continuity rules.
+6. Use location anchors for recurring sets when needed:
+   `location`, plus `location_anchor: true` on the canonical first view.
+7. Run `python shorts.py status --slug <slug> --json` and inspect both JSON files.
+8. Run `python shorts.py board --slug <slug>` and stop. Show the human
+   `storyboard/contact-sheet.png` and wait for explicit approval.
+9. Never run `approve` merely because the storyboard exists. Approval belongs
+   to the human owner. If the storyboard or beat count changes, approval must be
+   obtained again.
+10. After explicit approval, run `approve`, `gen`, `install`, and `render` in
+    that order. Re-run failed scenes with `gen --only N,N`.
+11. Inspect the final MP4 at every narration-synced scene midpoint. Check cast,
+    duplicate props, unintended text, continuity, captions, duration, audio and
+    end card before declaring it ready.
+12. Never upload, schedule, publish, or alter a channel setting without a
+    separate explicit request from the human owner.
 
-Machine-readable progress is available through:
-
-```bash
-python shorts.py status --slug <slug> --json
-```
-
-Never run `upload.py` unless the user separately asks to upload. Default any
-requested upload to private unless the user explicitly chooses otherwise.
+The deterministic final renderer is not an AI agent. Do not replace generated
+scene files after approval without reporting that change and performing QA.
 

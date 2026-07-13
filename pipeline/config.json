@@ -1,78 +1,377 @@
 {
   "meta": {
-    "product": "Agent Shorts Kit",
-    "config_version": "1.0"
+    "channel": "History Raccoon (EN)",
+    "channel_note": "English-language YouTube Shorts. Pixel-art history in 60 seconds narrated by a pixel raccoon mascot. Sister channel to RU original 'Киса Историк за Минуту'.",
+    "config_version": "1.0",
+    "single_source_of_truth": true,
+    "usage": "Every pipeline stage reads this file. Change values HERE, never inline in scripts."
+  },
+  "character": {
+    "name": "History Raccoon",
+    "pinned_prompt": "a cute chubby cartoon raccoon mascot named History Raccoon, gray fur with a black bandit mask around the eyes, bushy ringed tail, wearing a tiny brown leather explorer hat and a small red scarf, big friendly eyes, flat 2D 16-bit pixel art sprite, cel-shaded flat colors, clean dark outline, front-facing three-quarter view, retro SNES video game character",
+    "pinned_prompt_note": "PINNED. NOTE: currently unused by the pipeline (mascot.enable=false; the raccoon is cast inside scenes via scene descriptions + visual_bible, and the thumbnail portrait references assets/mascot/raccoon-test.png directly). Kept as the canonical character string; style tail updated 2026-07-05 to match style.keywords.",
+    "negative": "no photorealism, no 3d render, no motion blur, no jpeg artifacts, not modern flat vector, no realistic photo"
+  },
+  "style": {
+    "keywords": "flat 2D pixel art, 16-bit SNES JRPG cutscene style, cel-shaded flat color fills, clean dark outlines, fine pixel grid with subtle dithering, vibrant limited palette, hand-placed pixel detail",
+    "keywords_note": "Reworked 2026-07-05 to match the reference Kisa channel: detailed painterly SNES-era pixel art (soft shading, glow, fine grid, rich color) NOT chunky NES pixels. Do NOT reintroduce 'NES palette', 'chunky pixels' or 'thick black outlines' -- the 32-colour posterized look was the rejected style; richness now comes from the 128-colour pixelate pass.",
+    "scene_prompt_template": "{scene}. {style}. Strictly a FLAT 2D illustration like a retro video game cutscene: no 3D render, no realistic fur texture, no photorealism, no depth of field, no soft airbrush shading. no text, no words, no letters, no watermark, wide cinematic composition, vertical 9:16 framing",
+    "scene_prompt_template_note": "{scene} = one scene description from episode.json. {style} = style.keywords. Character prompt is appended when the raccoon appears in the scene."
+  },
+  "voice": {
+    "engine": "elevenlabs",
+    "engine_note": "'edge-tts' | 'elevenlabs' (default since 2026-07-04, key quota fixed). elevenlabs uses v3 emotion audio tags + returns character timestamps (tts.py builds words.json directly, align.py skips whisper). If elevenlabs fails at run time, run.py falls back to edge-tts with a loud warning so the pipeline never blocks.",
+    "name": "en-US-ChristopherNeural",
+    "fallback_name": "en-US-GuyNeural",
+    "rate": "+8%",
+    "pitch": "+0Hz",
+    "note": "Free Microsoft neural voice. Christopher = warm documentary narrator. Rate +8% keeps ~155 words under 60s.",
+    "elevenlabs": {
+      "model_id": "eleven_v3",
+      "model_fallback": [
+        "eleven_v3",
+        "eleven_multilingual_v2"
+      ],
+      "model_note": "Verified present + text-to-speech-capable on this key's tier via GET /v1/models (2026-07-04). tts.py resolves model_fallback against /v1/models at run time and uses the first available id; eleven_v3 was available so no fallback was needed.",
+      "voice_id": "N2lVS1w4EtoT3dr4eOWO",
+      "voice_name": "Callum - Husky Trickster",
+      "voice_note": "Выбран Тимой 2026-07-06 из 7 сэмплов (см. assets/voice-samples/candidates-2026-07-06/): хриплый характерный голос-трикстер под персонажа енота-бандита — сильная отстройка от 'гладкого ИИ-диктора'. Запасной: Daniel onwK4e9ZLuTAKqWW03F9 (британский диктор). Прежний George JBFqnCBsd6RMkjVDRZzb звучал 'как ИИ'.",
+      "output_format": "mp3_44100_128",
+      "stability": 0.4,
+      "similarity_boost": 0.75,
+      "settings_note": "2026-07-06 humanize-ресерч + A/B Тимы: stability 0.4 (зона 0.35-0.45 — живая вариативность без галлюцинаций Creative-режима; Тима выбрал сэмпл A @0.3, 0.4 = безопасная версия того же) + style 0.2. similarity 0.75. Текст остаётся 'письменным' — устный рерайт не требуется.",
+      "style": 0.2
+    },
+    "postfx": {
+      "enable": true,
+      "note": "Чистый voice polish (2026-07-12): highpass 70Hz + мягкий компрессор 2:1 + loudnorm I=-14/TP=-1.5, без искусственного room tone. Применяется к voice.mp3 ПОСЛЕ снятия таймстемпов (тайминг не сдвигает). Идемпотентно: оригинал сохраняется в voice.prefx.mp3, наличие prefx = уже обработано."
+    }
   },
   "language": "en",
   "video": {
     "width": 1080,
     "height": 1920,
-    "fps": 30,
-    "scene_count": 8,
-    "crf": 23
+    "fps": 60,
+    "target_seconds": 45,
+    "min_seconds": 38,
+    "max_seconds": 50,
+    "codec": "h264",
+    "audio_codec": "aac",
+    "crf": 23,
+    "crf_note": "Remotion x264 CRF. 23 = visually lossless-ish, keeps a 60s Short ~15-25MB instead of 100MB+. Lower=bigger/better.",
+    "scene_count": 16
+  },
+  "captions": {
+    "words_per_group": 1,
+    "font_size_px": 64,
+    "position": "top",
+    "bottom_offset_px": 620,
+    "active_color": "#ffffff",
+    "idle_color": "#ffe14d",
+    "outline_color": "#000000",
+    "outline_px": 8,
+    "min_display_frames": 5,
+    "note": "Kisa-style (2026-07-06, по покадровому разбору @kisahistory): ОДНО маленькое ЖЁЛТОЕ слово ВВЕРХУ кадра (top_offset_px от верха), активный акцент (цифры/emphasis) — белый. Раньше: гигантские белые 132px по центру-низу — закрывали кадр, главный визуальный шум.",
+    "top_offset_px": 150
   },
   "script": {
-    "target_words": 85,
-    "min_words": 65,
-    "max_words": 105
+    "target_words": 80,
+    "min_words": 72,
+    "max_words": 88,
+    "note": "Retuned 2026-07-11 from live channel analytics: target a 38-50 second final Short. Callum scripts should stay near 80 words and open with the physical outcome in the first sentence."
   },
-  "voice": {
-    "engine": "edge-tts",
-    "name": "en-US-ChristopherNeural",
-    "fallback_name": "en-US-GuyNeural",
-    "rate": "+5%",
-    "pitch": "+0Hz",
-    "postfx": {"enable": true}
+  "pixelate": {
+    "downscale_width": 400,
+    "palette_colors": 128,
+    "note": "Nearest-neighbor downscale to downscale_width then upscale back to video width, quantize to palette_colors. Forces a uniform pixel grid on ALL images (codex or placeholder). Retuned 2026-07-05 from 320/32 to 400/128 to match the Kisa reference: a 4-variant test on grok_anchor.png (320/32 vs 560/96 vs 720/160 vs raw) showed the crude look came from the 32-colour palette (heavy banding, mushed faces), NOT the grid coarseness -- Kisa's effective grid is ~300-360px. 400/128 keeps Kisa's visible-but-fine pixel grid while 128 colours restore painterly shading/glow and readable crowd detail. animate.py reuses these values for the shared-palette video pass (128-colour frame-0 palette still quantizes cleanly and stays temporally stable)."
   },
-  "character": {
-    "name": "",
-    "pinned_prompt": "",
-    "negative": "no text, no watermark, no logo"
+  "animate": {
+    "enable": false,
+    "enable_note": "OFF 2026-07-06: hero clip is pre-generated via Vidu Q2 (fal-ai/vidu/q2/image-to-video/pro, movement small — validated in spec/video-generation-playbook.md) and placed as scenes/scene_4_video.mp4 manually; assemble stages any scene_N_video.mp4 it finds. Grok i2v is deprecated (morphing). Re-enable only after animate.py gets a vidu_q2 provider.",
+    "mode": "boomerang",
+    "mode_note": "'boomerang' (default ambient i2v loop) or 'flf' (first-last-frame ONE-WAY action clip). episode.json 'hero_mode' overrides per-episode. flf reads scene_(hero-1).png as the start frame and scene_hero.png as the end frame, plays once, then Remotion crossfades to the end still (no boomerang) so an action reads as a single forward motion.",
+    "provider": "grok",
+    "flf_providers": [
+      "kling_o1",
+      "wan_flf2v"
+    ],
+    "flf_providers_note": "Tried in order for mode=flf. kling_o1 (Kling O1, $0.112/s, best action) first; wan_flf2v (Wan-2.1 FLF2V, ~$0.20-0.40) is the cheaper fallback if the Kling id 404s or errors.",
+    "providers": {
+      "grok": {
+        "model": "xai/grok-imagine-video/image-to-video",
+        "usd_per_clip": 0.252
+      },
+      "wan": {
+        "model": "fal-ai/wan/v2.2-a14b/image-to-video/turbo",
+        "usd_per_clip": 0.05
+      },
+      "kling_o1": {
+        "model": "fal-ai/kling-video/o1/image-to-video",
+        "usd_per_clip": 0.56,
+        "duration_seconds": 5
+      },
+      "wan_flf2v": {
+        "model": "fal-ai/wan-flf2v",
+        "usd_per_clip": 0.4
+      }
+    },
+    "resolution": "480p",
+    "aspect_ratio": "9:16",
+    "duration_seconds": 5,
+    "fps_out": 24,
+    "shared_palette": true,
+    "max_clips_per_episode": 5,
+    "max_usd_per_episode": 1.8,
+    "poll_timeout_seconds": 300,
+    "prompt_suffix": "Subtle ambient motion ONLY: {motion}. NO new objects or events. Camera locked. PRESERVE the 16-bit pixel art style, hard pixel grid, no smoothing.",
+    "flf_prompt": "The white-kitted raccoon's diving header sends the leather ball flying past the yellow goalkeeper into the net; the net ripples; white-kitted raccoons begin celebrating. Flat 2D 16-bit pixel art cutscene style, clean outlines, no smoothing.",
+    "default_motion_hints": "gentle ambient sway, distant flags wave, soft light flicker",
+    "note": "animate.py: hero-scene image-to-video via fal.ai. boomerang mode uploads scenes/scene_N.png, runs i2v (grok=$0.25+$0.002/clip, wan turbo=$0.05 budget fallback, default provider grok), re-pixelates every frame against ONE SHARED palette (frame-0 palette -> no boiling), bakes a seamless forward+reverse boomerang. flf mode (mode='flf' or episode 'hero_mode'='flf') uploads scene_(hero-1).png + scene_hero.png as start+end keyframes to a first-last-frame model (kling_o1 -> wan_flf2v fallback), re-pixelates the same way, encodes FORWARD-ONLY (no boomerang; Remotion crossfades to the end still). Writes scenes/scene_N_video.mp4 (1080-wide, fps_out, no audio). HARD COST GUARD: never exceeds max_clips_per_episode NOR max_usd_per_episode (kling_o1 5s = $0.56). Resumable (skips existing mp4). NEVER blocks the pipeline: any API/timeout/download/ffmpeg failure warns loudly, removes partials, and the scene falls back to stills. Hero scene = episode.json 'hero_scene' (1-based) + 'hero_motion_hints', else a motion-keyword heuristic. Set enable=false to render stills only."
   },
-  "style": {
-    "keywords": "editorial illustration, cinematic lighting, clear focal subject",
-    "scene_prompt_template": "{scene}. {style}. no text, no watermark, vertical 9:16 composition"
-  },
-  "pixelate": {"downscale_width": 540, "palette_colors": 160},
   "scenes_adapter": {
-    "primary": "placeholder",
-    "fallback": "placeholder",
+    "primary": "grok",
+    "fallback": "codex",
+    "grok_t2i_model": "xai/grok-imagine-image",
+    "grok_edit_model": "xai/grok-imagine-image/edit",
+    "grok_usd_per_t2i": 0.02,
+    "grok_usd_per_edit": 0.022,
+    "grok_resolution": "1k",
+    "grok_poll_timeout_seconds": 240,
+    "max_usd_per_episode": 0.3,
     "codex_bin": "codex",
-    "codex_scene_budget": 0,
-    "codex_total_timeout_seconds": 0,
-    "max_usd_per_episode": 0
-  },
-  "animate": {"enable": false},
-  "layers": {"enable": false},
-  "captions": {
-    "words_per_group": 2,
-    "font_size_px": 74,
-    "position": "bottom",
-    "bottom_offset_px": 390,
-    "top_offset_px": 150,
-    "active_color": "#ffe14d",
-    "idle_color": "#ffffff",
-    "outline_color": "#000000",
-    "outline_px": 10,
-    "min_display_frames": 5
+    "codex_total_timeout_seconds": 560,
+    "codex_scene_budget": 2,
+    "note": "primary 'grok' | 'codex' | 'placeholder'. grok = fal.ai Grok Imagine with the CONTINUITY PROTOCOL: scene_1 via text-to-image (prompt + episode.json visual_bible + style keywords, raw kept as scenes/grok_anchor.png), scenes 2..N via the edit endpoint referencing the scene_1 anchor (plus the mascot sprite if a scene mentions the raccoon) so cast/uniforms/palette stay consistent across the whole episode. max_usd_per_episode caps BOTH the scene set and the mascot pose pack (each stage independently). Any grok failure falls back per-scene to codex (up to codex_scene_budget within codex_total_timeout_seconds) then the Pillow placeholder, so the pipeline NEVER blocks."
   },
   "music": {
-    "enabled": false,
+    "enabled": true,
     "file": "assets/music/track.mp3",
     "narration_volume": 1.0,
-    "music_volume": 0.15,
-    "duck_no_speech": 0.3,
-    "duck_under_speech": 0.12,
-    "duck_punchline": 0.02
+    "music_volume": 0.18,
+    "duck_no_speech": 0.35,
+    "duck_under_speech": 0.15,
+    "duck_punchline": 0.02,
+    "note": "Background music volume tracks VO activity: duck_no_speech in the gaps, duck_under_speech under narration (word within +/-0.3s), duck_punchline for ~0.4s before the final sentence. If music.file is absent, pipeline renders WITHOUT music (must not fail)."
   },
   "sfx": {
     "enable": true,
-    "master_gain": 0.3,
-    "gains": {"whoosh": 0.35, "impact": 0.6, "riser": 0.3, "blip": 0.4, "pop": 0.45}
+    "master_gain": 0.35,
+    "gains": {
+      "whoosh": 0.0,
+      "impact": 0.7,
+      "riser": 0.4,
+      "blip": 0.6,
+      "pop": 0.55
+    },
+    "note": "8-bit SFX pack synthesized by sfx.py (deterministic, idempotent) into assets/sfx/. Placed in Remotion at cold-open, scene transitions, keyword pops, snap punch and the punchline beat. Final gain = master_gain * per-type gain; WAVs are peak-normalized to 0.7, so the layer sits clearly under the untouched voice. Set enable=false to render without SFX."
   },
-  "mascot": {"enable": false, "size_px": 300},
-  "thumbnail": {"enable": false},
-  "endcard": {"enable": false},
-  "motion": {"style": "smooth"}
+  "mascot": {
+    "enable": false,
+    "enable_note": "Corner narrator DISABLED since the kisahistory format rework: the raccoon acts INSIDE the scenes (cast via scene prompts + visual_bible). Set true to bring the corner sprite back.",
+    "sprite": "assets/mascot/raccoon.png",
+    "corner": "bottom-left",
+    "size_px": 320,
+    "talk_half": "assets/mascot/raccoon-talk-half.png",
+    "note": "Static-corner narrator, now animated. Prefers raccoon-test.png (codex) else raccoon.png. Optional talk-open/talk-half/blink frames drive the mouth flap; talk-half is auto-painted from test+open if absent."
+  },
+  "motion": {
+    "note": "Motion pack. Every subsystem has an enable flag + amplitudes. Remotion reads these via props (run.py maps snake_case -> camelCase). The values below are the PUNCHY baseline; motion.style picks the profile Remotion resolves. Duration is NOT affected by any of this.",
+    "style": "smooth",
+    "style_note": "'smooth' (default) or 'punchy'. run.py passes this; Remotion (motionStyle.ts) folds the profile into one resolved config. smooth = same cut density, eased curves: shot-cut/sentence-start micro-shake off (scene-start 2px eased bump only), spring hook punch over ~7 frames, easeInOut camera moves, no-overshoot caption highlight, continuous mascot sway (no per-word squash), longer eased dissolve/wipe (~16f), softer scene-land impact. punchy = original hard-cut amplitudes below.",
+    "parallax": {
+      "enable": false,
+      "enable_note": "ВЫКЛЮЧЕН НАВСЕГДА 2026-07-07 по вердикту Тимы: rembg-слои на пиксель-арте дают артефакты (призраки/пятна заплатки), «дешёвая анимация». Движение сцен = нейронный i2v (Vidu Q2) + Ken Burns. Не включать обратно.",
+      "bg_scale": 1.08,
+      "bg_drift_px": 16,
+      "fg_drift_multiplier": 1.4,
+      "fg_drift_multiplier_note": "2.7 -> 1.4 (2026-07-07): при 2.7 fg уезжал на ~43px и из-под него вылезал призрак из bg-заплатки (ep023 QA). Относительный сдвиг fg/bg теперь ~6px — под толщину пиксельной сетки.",
+      "fg_zoom_pct": 0.8,
+      "note": "layers.py cuts fg/bg per scene; bg scales bg_scale and drifts bg_drift_px, fg drifts fg_drift_multiplier x faster + a fg_zoom_pct slow zoom. Direction alternates per scene."
+    },
+    "transitions": {
+      "enable": true,
+      "frames": 6,
+      "cell_px": 24,
+      "note": "Rotated by scene index: pixel dissolve (0.4s), pixel wipe (0.35s), zoom-punch (0.3s). frames = max overlap; cell_px = dissolve/wipe grid. Overlaps neighbours, total duration unchanged."
+    },
+    "effects": {
+      "enable": true,
+      "particles_count": 16,
+      "particle_size_px": 3,
+      "ray_count": 3,
+      "vignette_strength": 0.38,
+      "temp_sway_pct": 3,
+      "note": "One effect per scene (particles / light rays / vignette-pulse), picked by episode.json 'motion' hint array if present else by scene index."
+    },
+    "shake": {
+      "enable": true,
+      "px": 4,
+      "frames": 2,
+      "sentence_gap_seconds": 0.5,
+      "note": "2-frame impact micro-shake at each scene start and on the first word of each sentence (word after a gap > sentence_gap_seconds)."
+    },
+    "captions": {
+      "pop_scale": 1.12,
+      "settle_scale": 1.06,
+      "entrance_px": 8,
+      "entrance_frames": 3,
+      "note": "Active word springs 1.0 -> pop_scale -> settle_scale over ~4 frames. Each group slides up entrance_px + fades over entrance_frames."
+    },
+    "mascot": {
+      "flap_hz": 5,
+      "lean_deg": 2,
+      "squash_pct": 3,
+      "breath_pct": 1,
+      "entrance_frames": 21,
+      "note": "Talking: closed->half->open->half flap at ~flap_hz (5 = deliberate, not chattering), +/-lean_deg lean sway, squash_pct squash-stretch per word. Idle: breath_pct breathing + blink. Slides up with one overshoot bounce over entrance_frames. Mouth flap only runs on the BASE narrator sprite; per-scene pose sprites (episode mascot/pose_scene_N.png from mascot_poses.py) replace it at scene boundaries with a small re-triggered entrance bounce and no mouth overlay."
+    },
+    "shots": {
+      "enable": false,
+      "min_seconds": 3,
+      "max_seconds": 5,
+      "detail_zoom_min": 1.35,
+      "detail_zoom_max": 1.5,
+      "alt_zoom_min": 1.15,
+      "alt_zoom_max": 1.25,
+      "wide_zoom": 1.08,
+      "push_pct": 0.06,
+      "drift_pct": 3,
+      "max_zoom": 1.6,
+      "note": "Multi-crop: each scene is hard-cut into 2-3 shots of the SAME image (wide -> detail punch-in -> alt crop) so the frame changes every 3-5s. Zoom never exceeds max_zoom (pixel grid stays chunky, never mushy). Each shot cut also fires a micro-shake + whoosh. Duration is NOT affected.",
+      "note_disabled": "OFF 2026-07-06: kisa-format эпизоды режутся на ~23 бит-сцены по 2-3с — мультикроп внутри такой сцены не нужен и дёргает. Для легаси-эпизодов с 5 сценами включить обратно."
+    },
+    "hook": {
+      "enable": true,
+      "card_in_frame": 2,
+      "card_hold_frame": 12,
+      "card_out_frame": 30,
+      "punch_frame": 36,
+      "punch_scale": 1.18,
+      "head_start_frac": 0.15,
+      "card_font_px": 150,
+      "note": "First-1.5s hook: cold-open title card slammed frames card_in..card_out (cleared before the snap punch so it never ghosts over it), first shot opens head_start_frac into its move (motion at t=0), snap punch-in (1.0->punch_scale) at punch_frame with micro-shake + whoosh + pop."
+    },
+    "emphasis": {
+      "enable": true,
+      "font_size_px": 140,
+      "y_pct": 33,
+      "hold_frames": 12,
+      "max_pops": 3,
+      "min_spacing_seconds": 8.0,
+      "color": "#ffe14d",
+      "outline_color": "#000000",
+      "outline_px": 12,
+      "note": "Sparse keyword pops (max_pops per video): big accent word slam in the upper-middle zone (y_pct% from top, clear of captions/mascot). smooth style: soft scale-in over ~6f + hold + fade & drift-up over ~6f, faint 4% flash, synced blip SFX. Words: episode.json 'emphasis' array, else numbers/years then longest proper-nouns at sentence starts, min_spacing_seconds apart."
+    }
+  },
+  "paths": {
+    "root": "..",
+    "assets": "../assets",
+    "episodes": "../episodes",
+    "remotion": "remotion"
+  },
+  "thumbnail": {
+    "mode": "portrait",
+    "mode_note": "'portrait' (default, Kisa-style) | 'title'. portrait = ONE fal Grok-edit image of the mascot reacting (big emotive raccoon face + episode backdrop) with ONE huge burned word; title = the legacy composite (hero scene + wrapped title + corner mascot). episode.json 'thumbnail_mode' overrides. On any portrait-generation failure the stage falls back to 'title' so the pipeline never blocks.",
+    "hero_scene_default": "scene_1",
+    "hero_scene_note": "Which scenes/scene_N.png to use as the thumbnail background (title mode). episode.json 'thumbnail_scene' overrides this per-episode.",
+    "portrait": {
+      "edit_prompt_template": "Dramatic close-up portrait of the EXACT same raccoon character as the reference image (same face markings, same brown flat cap, same fur), {emotion}, in front of {backdrop}, detailed 16-bit SNES-era pixel art, painterly pixel shading, soft glow, atmospheric cinematic lighting, rich color depth, fine pixel grid, no text, no words, no letters, no watermark, vertical 9:16 framing",
+      "default_emotion": "jaw-dropped shocked expression, wide eyes",
+      "default_backdrop": "a dramatic atmospheric backdrop related to the episode, blurred, warm cinematic lighting",
+      "focus_y": 0.3,
+      "focus_y_wide": 0.42,
+      "focus_y_wide_note": "Wide (1280x720) crops a portrait source, so it zooms in hard. A higher focus_y keeps the emotive EYES + cap in the upper third (above the burned word) instead of framing only the muzzle.",
+      "word_bottom_frac": 0.24,
+      "word_font_size_max": 320,
+      "word_font_size_min": 96,
+      "word_outline_px_ratio": 0.12,
+      "word_color": "#ffffff",
+      "word_accent_color": "#ffe14d",
+      "word_outline_color": "#000000",
+      "usd_per_image": 0.022,
+      "note": "One Grok edit (reference = assets/mascot/raccoon-test.png) -> out/thumb_portrait_base.png (cached/resumable), cover-cropped to both formats, re-pixelated, then ONE big word (episode.json 'thumbnail_word', else the punchiest short title word + '!') burned in huge pixel-style caps with a hard outline in the bottom third. Word is accent-colored if it contains a digit, else white. Cost-guarded against scenes_adapter.max_usd_per_episode (independent of the scene set)."
+    },
+    "vertical": {
+      "width": 1080,
+      "height": 1920
+    },
+    "wide": {
+      "width": 1280,
+      "height": 720
+    },
+    "wide_crop_focus_y": 0.42,
+    "wide_crop_focus_y_note": "0=top, 1=bottom, 0.5=center. Bias for the vertical->widescreen cover-crop since source scenes are portrait.",
+    "gradient": {
+      "vertical_bottom_start_frac": 0.62,
+      "wide_left_end_frac": 0.62,
+      "max_opacity": 0.86,
+      "note": "vertical: black ramps in from y = height*(1-vertical_bottom_start_frac) down to the bottom edge. wide: black ramps out from x=0 to x = width*wide_left_end_frac (roughly where the mascot sits, so it stays lit)."
+    },
+    "title": {
+      "max_words": 5,
+      "min_words": 3,
+      "stopwords": [
+        "a",
+        "an",
+        "the",
+        "of",
+        "in",
+        "on",
+        "at",
+        "to",
+        "and",
+        "or",
+        "but",
+        "is",
+        "are",
+        "was",
+        "were",
+        "then",
+        "that",
+        "this",
+        "it",
+        "its",
+        "for",
+        "with",
+        "as",
+        "by"
+      ],
+      "fonts": [
+        "/System/Library/Fonts/Supplemental/Arial Black.ttf",
+        "/System/Library/Fonts/Supplemental/Impact.ttf"
+      ],
+      "text_color": "#ffffff",
+      "accent_color": "#ffe14d",
+      "outline_color": "#000000",
+      "outline_px_ratio": 0.085,
+      "max_lines": 3,
+      "line_spacing_ratio": 1.06,
+      "margin_px": 64,
+      "vertical_font_size_max": 168,
+      "vertical_font_size_min": 84,
+      "wide_font_size_max": 104,
+      "wide_font_size_min": 56,
+      "note": "3-5 punchiest words from episode.json title (text before first em-dash, minus stopwords). Accent color hits a number if one is present, else the last word."
+    },
+    "mascot": {
+      "vertical_size_px": 380,
+      "wide_size_px": 460,
+      "margin_px": 28,
+      "shadow_offset_px": 14,
+      "shadow_blur_radius": 6,
+      "shadow_opacity": 150,
+      "note": "Knocked-out raccoon composited at a corner with a subtle hard-edged pixel-style drop shadow (small blur, not a soft realistic shadow)."
+    }
+  },
+  "endcard": {
+    "enable": true,
+    "seconds": 2.6,
+    "image": "assets/channel/avatar.png",
+    "voice": "assets/channel/endcard_voice.mp3",
+    "title": "RACCOON REWIND",
+    "subtitle": "NEW STORY EVERY DAY",
+    "button": "SUBSCRIBE",
+    "note": "Kisa-style closer после нарратива (2026-07-06): маскот + лого + SUBSCRIBE-пилюля + голосовая строка (assets/channel/endcard_voice.mp3, генерится один раз выбранным голосом; файла нет -> карта без голоса). Remotion: EndCard.tsx; длительность композиции растёт на seconds."
+  }
 }
-

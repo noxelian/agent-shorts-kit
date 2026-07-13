@@ -1,23 +1,22 @@
 #!/usr/bin/env python3
-"""Agent-friendly CLI for creating and rendering vertical Shorts."""
+"""Thin CLI over the production Shorts pipeline."""
 from __future__ import annotations
 
 import argparse
 import hashlib
 import json
+import os
 import re
 import shutil
 import subprocess
 import sys
-from datetime import datetime, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 PIPELINE = ROOT / "pipeline"
 EPISODES = ROOT / "episodes"
 CONFIG = PIPELINE / "config.json"
-SCHEMA = ROOT / "contracts" / "episode.schema.json"
-sys.path.insert(0, str(PIPELINE))
+PRODUCTION = PIPELINE / "production.json"
 
 
 def read_json(path: Path) -> dict:
@@ -30,8 +29,7 @@ def write_json(path: Path, data: dict) -> None:
 
 
 def slugify(value: str) -> str:
-    slug = re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-")
-    return slug[:64] or "short"
+    return re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-")[:64] or "short"
 
 
 def episode_dir(slug: str) -> Path:
@@ -39,62 +37,58 @@ def episode_dir(slug: str) -> Path:
 
 
 def sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
+    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def _scene_count(ep_dir: Path) -> int:
-    episode_path = ep_dir / "episode.json"
-    if not episode_path.exists():
-        return 0
-    scenes = read_json(episode_path).get("scenes", [])
-    return len(scenes) if isinstance(scenes, list) else 0
-
-
-def _approval_valid(ep_dir: Path) -> bool:
-    board = ep_dir / "storyboard" / "contact-sheet.png"
+def approval_valid(ep_dir: Path) -> bool:
+    board = ep_dir / "storyboard" / "board_raw.png"
     marker = ep_dir / "storyboard" / "approved.json"
-    if not board.exists() or not marker.exists():
+    bits_path = ep_dir / "bits.json"
+    if not all(path.exists() for path in (board, marker, bits_path)):
         return False
     try:
         approval = read_json(marker)
-        return (
-            approval.get("contact_sheet_sha256") == sha256(board)
-            and approval.get("scene_count") == _scene_count(ep_dir)
-        )
+        bits = read_json(bits_path).get("bits", [])
+        return approval.get("board_raw_sha256") == sha256(board) and approval.get("scene_count") == len(bits)
     except (OSError, ValueError, TypeError):
         return False
 
 
 def status_for(ep_dir: Path) -> dict:
-    count = _scene_count(ep_dir)
-    present = sum((ep_dir / "scenes" / f"scene_{i}.png").exists() for i in range(1, count + 1))
-    board = ep_dir / "storyboard" / "contact-sheet.png"
+    bits_path = ep_dir / "bits.json"
+    bits = read_json(bits_path).get("bits", []) if bits_path.exists() else []
+    meta = read_json(bits_path).get("meta", {}) if bits_path.exists() else {}
+    generated_name = meta.get("bits_dirname") or "generated"
+    generated = ep_dir / generated_name
+    count = len(bits)
+    images = sum((generated / f"bit_{index:02d}.png").exists() for index in range(1, count + 1))
+    installed = sum((ep_dir / "scenes" / f"scene_{index}.png").exists() for index in range(1, count + 1))
     result = {
         "slug": ep_dir.name,
-        "request": (ep_dir / "request.json").exists(),
-        "episode": (ep_dir / "episode.json").exists(),
+        "plan": bits_path.exists(),
+        "scene_count": count,
+        "storyboard": (ep_dir / "storyboard" / "contact-sheet.png").exists(),
+        "approved": approval_valid(ep_dir),
+        "generated_images": images,
+        "installed_scenes": installed,
         "voice": (ep_dir / "voice.mp3").exists(),
-        "captions": (ep_dir / "words.json").exists(),
-        "scenes_expected": count,
-        "scenes_present": present,
-        "storyboard": board.exists(),
-        "approved": _approval_valid(ep_dir),
+        "word_timestamps": (ep_dir / "words.json").exists(),
         "final": (ep_dir / "out" / "final.mp4").exists(),
     }
     if result["final"]:
         result["next_action"] = "done"
-    elif result["approved"]:
+    elif installed == count and count:
         result["next_action"] = "render"
+    elif images == count and count:
+        result["next_action"] = "install"
+    elif result["approved"]:
+        result["next_action"] = "gen"
     elif result["storyboard"]:
         result["next_action"] = "human_review_then_approve"
-    elif count and present == count and result["voice"] and result["captions"]:
+    elif result["plan"]:
         result["next_action"] = "board"
     else:
-        result["next_action"] = "agent_create_missing_assets"
+        result["next_action"] = "init"
     return result
 
 
@@ -102,257 +96,131 @@ def command_init(args: argparse.Namespace) -> None:
     slug = args.slug or slugify(args.topic)
     ep_dir = episode_dir(slug)
     ep_dir.mkdir(parents=True, exist_ok=True)
-    request_path = ep_dir / "request.json"
-    if request_path.exists() and not args.force:
-        raise SystemExit(f"Request already exists: {request_path} (use --force to replace it)")
-    config = read_json(CONFIG)
-    request = {
-        "protocol_version": "1.0",
-        "topic": args.topic,
-        "slug": slug,
-        "language": args.language or config.get("language", "en"),
-        "target": {
-            "scene_count": args.scenes or config["video"]["scene_count"],
-            "width": config["video"]["width"],
-            "height": config["video"]["height"],
-            "fps": config["video"]["fps"],
-            "words": config["script"]["target_words"],
-        },
-        "contract": "../../contracts/episode.schema.json",
-        "instructions": "Read AGENTS.md. Create assets, validate, build storyboard, then stop for human approval.",
-    }
-    write_json(request_path, request)
-    print(request_path)
-
-
-def validation_errors(ep_dir: Path) -> list[str]:
-    errors: list[str] = []
-    episode_path = ep_dir / "episode.json"
-    if not episode_path.exists():
-        return [f"missing {episode_path}"]
-    try:
-        episode = read_json(episode_path)
-    except (OSError, json.JSONDecodeError) as error:
-        return [f"invalid episode.json: {error}"]
-    try:
-        import jsonschema
-        jsonschema.validate(episode, read_json(SCHEMA))
-    except ImportError:
-        for key in ("topic", "title", "narration", "scenes", "description", "tags", "hashtags"):
-            if key not in episode:
-                errors.append(f"episode.json missing required key: {key}")
-    except Exception as error:  # jsonschema exposes several validation subclasses
-        errors.append(f"episode.json schema error: {error}")
-
-    scenes = episode.get("scenes", [])
-    if isinstance(scenes, list):
-        for index in range(1, len(scenes) + 1):
-            if not (ep_dir / "scenes" / f"scene_{index}.png").exists():
-                errors.append(f"missing scenes/scene_{index}.png")
-    if not (ep_dir / "voice.mp3").exists():
-        errors.append("missing voice.mp3")
-    words_path = ep_dir / "words.json"
-    if not words_path.exists():
-        errors.append("missing words.json")
-    else:
-        try:
-            words = read_json(words_path)
-            if float(words.get("audio_duration", 0)) <= 0:
-                errors.append("words.json audio_duration must be > 0")
-            if not isinstance(words.get("words"), list) or not words["words"]:
-                errors.append("words.json words must be a non-empty array")
-        except (OSError, ValueError, TypeError, json.JSONDecodeError) as error:
-            errors.append(f"invalid words.json: {error}")
-    return errors
-
-
-def command_validate(args: argparse.Namespace) -> None:
-    ep_dir = episode_dir(args.slug)
-    errors = validation_errors(ep_dir)
-    if errors:
-        print("\n".join(f"ERROR: {item}" for item in errors), file=sys.stderr)
-        raise SystemExit(2)
-    print(f"OK: {ep_dir}")
-
-
-def command_captions(args: argparse.Namespace) -> None:
-    ep_dir = episode_dir(args.slug)
-    episode = read_json(ep_dir / "episode.json")
-    voice = ep_dir / "voice.mp3"
-    if not voice.exists():
-        raise SystemExit(f"Missing {voice}")
-    probe = subprocess.run(
-        ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=nw=1:nk=1", str(voice)],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if probe.returncode != 0:
-        raise SystemExit(f"ffprobe failed: {probe.stderr.strip()}")
-    duration = float(probe.stdout.strip())
-    tokens = re.findall(r"[\w']+[^\w\s]*", episode["narration"], flags=re.UNICODE)
-    if not tokens:
-        raise SystemExit("Narration contains no words")
-    step = duration / len(tokens)
-    words = [
-        {"word": token, "start": round(i * step, 3), "end": round((i + 1) * step, 3)}
-        for i, token in enumerate(tokens)
+    if (ep_dir / "bits.json").exists() and not args.force:
+        raise SystemExit(f"Episode exists: {ep_dir} (use --force to replace templates)")
+    bits = [
+        {"n": index, "vo": f"Narration beat {index}", "desc": f"Describe visual beat {index}"}
+        for index in range(1, args.scenes + 1)
     ]
-    write_json(ep_dir / "words.json", {"audio_duration": round(duration, 3), "source": "uniform-known-text", "words": words})
-    print(ep_dir / "words.json")
+    write_json(ep_dir / "bits.json", {
+        "meta": {"slug": slug, "title": args.topic, "scene_count": args.scenes,
+                 "target_duration_seconds": args.duration, "bits_dirname": "generated"},
+        "world": "Define recurring characters, location, palette, period and visual prohibitions.",
+        "bits": bits,
+    })
+    write_json(ep_dir / "episode.json", {
+        "title": args.topic,
+        "topic": args.topic,
+        "narration": "Replace with the reviewed final narration.",
+        "description": "",
+        "tags": [],
+        "hashtags": ["#Shorts"],
+        "scenes": [item["desc"] for item in bits],
+    })
+    write_json(ep_dir / "request.json", {
+        "workflow": "production-shorts-v1",
+        "topic": args.topic,
+        "instructions": "Read AGENTS.md. Research and replace every placeholder in bits.json and episode.json before board.",
+    })
+    print(ep_dir)
 
 
-def command_board(args: argparse.Namespace) -> None:
-    ep_dir = episode_dir(args.slug)
-    errors = validation_errors(ep_dir)
-    if errors:
-        print("\n".join(f"ERROR: {item}" for item in errors), file=sys.stderr)
-        raise SystemExit(2)
-    from PIL import Image, ImageDraw, ImageOps
-
-    count = _scene_count(ep_dir)
-    cols = min(4, count)
-    rows = (count + cols - 1) // cols
-    cell_w, cell_h, label_h = 270, 480, 44
-    sheet = Image.new("RGB", (cols * cell_w, rows * (cell_h + label_h)), "#111111")
-    draw = ImageDraw.Draw(sheet)
-    for index in range(1, count + 1):
-        image = Image.open(ep_dir / "scenes" / f"scene_{index}.png").convert("RGB")
-        image = ImageOps.fit(image, (cell_w, cell_h), method=Image.Resampling.LANCZOS)
-        x = ((index - 1) % cols) * cell_w
-        y = ((index - 1) // cols) * (cell_h + label_h)
-        sheet.paste(image, (x, y))
-        draw.rectangle((x, y + cell_h, x + cell_w, y + cell_h + label_h), fill="#111111")
-        draw.text((x + 12, y + cell_h + 12), f"SCENE {index}", fill="white")
-    storyboard = ep_dir / "storyboard"
-    storyboard.mkdir(parents=True, exist_ok=True)
-    board_path = storyboard / "contact-sheet.png"
-    sheet.save(board_path, optimize=True)
-    (storyboard / "approved.json").unlink(missing_ok=True)
-    write_json(storyboard / "manifest.json", {"scene_count": count, "contact_sheet_sha256": sha256(board_path)})
-    print(board_path)
+def run_builder(slug: str, command: str, extra: list[str] | None = None) -> None:
+    cmd = [sys.executable, str(PIPELINE / "build_bits2.py"), slug, command]
+    if extra:
+        cmd.extend(extra)
+    raise SystemExit(subprocess.run(cmd, cwd=PIPELINE).returncode)
 
 
-def command_approve(args: argparse.Namespace) -> None:
-    ep_dir = episode_dir(args.slug)
-    board = ep_dir / "storyboard" / "contact-sheet.png"
-    if not board.exists():
-        raise SystemExit("No storyboard. Run board first and review the contact sheet.")
-    marker = {
-        "approved_at": datetime.now(timezone.utc).isoformat(),
-        "approved_by": args.by,
-        "contact_sheet_sha256": sha256(board),
-        "scene_count": _scene_count(ep_dir),
-    }
-    write_json(ep_dir / "storyboard" / "approved.json", marker)
-    print(ep_dir / "storyboard" / "approved.json")
+def command_builder(args: argparse.Namespace) -> None:
+    extra: list[str] = []
+    if getattr(args, "provider", None):
+        extra += ["--provider", args.provider]
+    if getattr(args, "only", None):
+        extra += ["--only", args.only]
+    if getattr(args, "force", False):
+        extra.append("--force")
+    run_builder(args.slug, args.builder_command, extra)
 
 
 def command_render(args: argparse.Namespace) -> None:
     ep_dir = episode_dir(args.slug)
-    errors = validation_errors(ep_dir)
-    if errors:
-        print("\n".join(f"ERROR: {item}" for item in errors), file=sys.stderr)
-        raise SystemExit(2)
-    if not _approval_valid(ep_dir):
-        raise SystemExit("Render blocked: storyboard is missing, unapproved, or changed after approval.")
-    import run as pipeline_run
-    import sfx as sfx_stage
-
-    config = read_json(CONFIG)
-    if config.get("sfx", {}).get("enable", False):
-        sfx_stage.synthesize(config)
-    final = pipeline_run.assemble(ep_dir, config, force=args.force)
-    print(final)
+    if not approval_valid(ep_dir):
+        raise SystemExit("Render blocked: storyboard is not approved or changed after approval.")
+    status = status_for(ep_dir)
+    if status["installed_scenes"] != status["scene_count"]:
+        raise SystemExit("Render blocked: run gen and install first.")
+    episode = read_json(ep_dir / "episode.json")
+    cmd = [sys.executable, str(PIPELINE / "run.py"), "--episode", str(ep_dir),
+           "--topic", str(episode.get("topic") or episode.get("title") or args.slug)]
+    if args.force:
+        (ep_dir / "out" / "final.mp4").unlink(missing_ok=True)
+    raise SystemExit(subprocess.run(cmd, cwd=PIPELINE).returncode)
 
 
 def command_status(args: argparse.Namespace) -> None:
-    result = status_for(episode_dir(args.slug))
-    if args.json:
-        print(json.dumps(result, ensure_ascii=False, indent=2))
-    else:
-        for key, value in result.items():
-            print(f"{key}: {value}")
+    data = status_for(episode_dir(args.slug))
+    print(json.dumps(data, ensure_ascii=False, indent=2) if args.json else "\n".join(f"{k}: {v}" for k, v in data.items()))
 
 
 def command_doctor(_args: argparse.Namespace) -> None:
+    production = read_json(PRODUCTION)
+    refs = [(ROOT / item).resolve() for item in production.get("reference_images", [])]
+    env_path = PIPELINE / ".env"
+    env_values: dict[str, str] = dict(os.environ)
+    if env_path.exists():
+        for line in env_path.read_text(encoding="utf-8").splitlines():
+            if "=" in line and not line.lstrip().startswith("#"):
+                key, value = line.split("=", 1)
+                env_values.setdefault(key.strip(), value.strip().strip('"').strip("'"))
+    provider = production.get("image_provider", "gemini")
     checks = {
         "python>=3.11": sys.version_info >= (3, 11),
         "ffmpeg": shutil.which("ffmpeg") is not None,
         "ffprobe": shutil.which("ffprobe") is not None,
         "node": shutil.which("node") is not None,
         "npm": shutil.which("npm") is not None,
-        "remotion_dependencies": (PIPELINE / "remotion" / "node_modules" / ".bin" / "remotion").exists(),
+        "remotion": (PIPELINE / "remotion/node_modules/.bin/remotion").exists(),
+        f"provider:{provider}": (
+            bool(env_values.get("GEMINI_API_KEY") or env_values.get("GOOGLE_API_KEY")) if provider == "gemini" else
+            bool((production.get("vertex") or {}).get("project") or env_values.get("GOOGLE_CLOUD_PROJECT"))
+            if provider == "vertex" else bool(env_values.get("FAL_KEY"))
+        ),
+        "reference_images": bool(refs) and all(path.exists() for path in refs),
     }
-    for module in ("PIL", "numpy"):
-        try:
-            __import__(module)
-            checks[f"python:{module}"] = True
-        except ImportError:
-            checks[f"python:{module}"] = False
-    for name, passed in checks.items():
-        print(f"{'OK' if passed else 'MISSING'}  {name}")
+    for name, ok in checks.items():
+        print(f"{'OK' if ok else 'MISSING'}  {name}")
+    optional_assets = {
+        "music": ROOT / "assets/music/track.mp3",
+        "endcard_image": ROOT / "assets/channel/avatar.png",
+        "endcard_voice": ROOT / "assets/channel/endcard_voice.mp3",
+    }
+    for name, path in optional_assets.items():
+        print(f"{'OK' if path.exists() else 'OPTIONAL'}  {name}")
     if not all(checks.values()):
         raise SystemExit(2)
 
 
-def command_demo(args: argparse.Namespace) -> None:
-    from PIL import Image, ImageDraw
-
-    topic = "A local demo built without API keys"
-    init_args = argparse.Namespace(topic=topic, slug=args.slug, language="en", scenes=4, force=True)
-    command_init(init_args)
-    ep_dir = episode_dir(args.slug)
-    narration = "This demo proves the workflow works without bundled keys. Four generated cards become a vertical short. The storyboard still needs your explicit approval before rendering."
-    episode = {
-        "topic": topic,
-        "title": "A Keyless Shorts Workflow",
-        "narration": narration,
-        "scenes": ["Plan", "Create assets", "Review storyboard", "Render safely"],
-        "description": "Synthetic local demo for Agent Shorts Kit.",
-        "tags": ["shorts", "automation", "ai agent"],
-        "hashtags": ["#shorts", "#automation"],
-    }
-    write_json(ep_dir / "episode.json", episode)
-    scenes_dir = ep_dir / "scenes"
-    scenes_dir.mkdir(parents=True, exist_ok=True)
-    colors = ("#183153", "#5b2c6f", "#0e6251", "#784212")
-    for index, label in enumerate(episode["scenes"], start=1):
-        image = Image.new("RGB", (1080, 1920), colors[index - 1])
-        draw = ImageDraw.Draw(image)
-        draw.text((90, 850), f"{index}. {label}", fill="white", stroke_width=2, stroke_fill="black")
-        image.save(scenes_dir / f"scene_{index}.png")
-    voice = ep_dir / "voice.mp3"
-    result = subprocess.run(
-        ["ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i", "sine=frequency=220:duration=8", "-q:a", "4", str(voice)],
-        capture_output=True,
-        text=True,
-    )
-    if result.returncode != 0:
-        raise SystemExit(f"ffmpeg demo audio failed: {result.stderr.strip()}")
-    command_captions(argparse.Namespace(slug=args.slug))
-    command_board(argparse.Namespace(slug=args.slug))
-    print("Demo assets are ready. Review the storyboard; approval was intentionally not created.")
-
-
 def parser() -> argparse.ArgumentParser:
-    cli = argparse.ArgumentParser(prog="shorts", description="Provider-neutral Shorts production CLI")
+    cli = argparse.ArgumentParser(description="Production Shorts pipeline")
     sub = cli.add_subparsers(dest="command", required=True)
-    init = sub.add_parser("init", help="create an agent request")
+    init = sub.add_parser("init")
     init.add_argument("--topic", required=True)
     init.add_argument("--slug")
-    init.add_argument("--language")
-    init.add_argument("--scenes", type=int)
+    init.add_argument("--scenes", type=int, default=16)
+    init.add_argument("--duration", type=int, default=43)
     init.add_argument("--force", action="store_true")
     init.set_defaults(func=command_init)
-    for name, func in (("validate", command_validate), ("captions", command_captions), ("board", command_board)):
+    for name in ("board", "approve", "gen", "install"):
         command = sub.add_parser(name)
         command.add_argument("--slug", required=True)
-        command.set_defaults(func=func)
-    approve = sub.add_parser("approve")
-    approve.add_argument("--slug", required=True)
-    approve.add_argument("--by", default="human-owner")
-    approve.set_defaults(func=command_approve)
+        if name in {"board", "gen"}:
+            command.add_argument("--provider", choices=["gemini", "vertex", "fal"])
+        if name == "gen":
+            command.add_argument("--only")
+        if name == "board":
+            command.add_argument("--force", action="store_true")
+        command.set_defaults(func=command_builder, builder_command=name)
     render = sub.add_parser("render")
     render.add_argument("--slug", required=True)
     render.add_argument("--force", action="store_true")
@@ -363,9 +231,6 @@ def parser() -> argparse.ArgumentParser:
     status.set_defaults(func=command_status)
     doctor = sub.add_parser("doctor")
     doctor.set_defaults(func=command_doctor)
-    demo = sub.add_parser("demo")
-    demo.add_argument("--slug", default="demo")
-    demo.set_defaults(func=command_demo)
     return cli
 
 
@@ -376,4 +241,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

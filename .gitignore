@@ -17,5 +17,7 @@ assets/mascot/*
 !assets/mascot/.gitkeep
 assets/channel/*
 !assets/channel/.gitkeep
+references/*
+!references/README.md
+.work/
 .DS_Store
-

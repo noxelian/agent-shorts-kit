@@ -1,8 +1,8 @@
 # Contributing
 
-Keep the core provider-neutral. New AI services should be optional adapters,
-must read credentials from environment variables, and must degrade cleanly when
-not configured. Do not weaken the human storyboard approval gate.
+Keep the production flow reproducible. New AI services must be optional
+adapters, read credentials from environment variables, preserve reference-image
+continuity and never weaken the human storyboard approval gate.
 
 Run before opening a change:
 
@@ -11,4 +11,3 @@ python3 -m compileall -q shorts.py pipeline
 npm --prefix pipeline/remotion run typecheck
 python3 -m unittest discover -s tests -v
 ```
-

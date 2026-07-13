@@ -28,7 +28,7 @@ const DISSOLVE = 6;
 const wordColor = (word: string): string =>
   /[0-9]/.test(word) ? "#ffe14d" : "#ffffff";
 
-// Thumbnail-first cold open: the preview IS the first beat. The video opens on the
+// Kisa-style cold open: the preview IS the first beat. The video opens on the
 // thumbnail portrait, cover-fit full-screen, with the SAME burned word style as
 // the baked thumbnail (big pixel caps, hard outline, bottom third) rendered in
 // Remotion text. A fast eased zoom (1.0 -> 1.06) plus the frame-2 impact SFX

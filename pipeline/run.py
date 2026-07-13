@@ -53,12 +53,12 @@ def _slugify(text: str) -> str:
 
 def _resolve_mascot() -> Path:
     mascot_dir = PROJECT_DIR / "assets" / "mascot"
-    for name in ("mascot.png", "character.png", "raccoon-test.png", "raccoon.png"):
+    for name in ("raccoon-test.png", "raccoon.png"):
         candidate = mascot_dir / name
         if candidate.exists():
             return candidate
     raise FileNotFoundError(
-        f"No mascot PNG found in {mascot_dir} (expected mascot.png or character.png)"
+        f"No mascot PNG found in {mascot_dir} (expected raccoon-test.png or raccoon.png)"
     )
 
 
@@ -107,10 +107,10 @@ def _ensure_mascot_half() -> Path | None:
     """Half-open mouth asset. Painted once from the closed + open frames and reused
     thereafter. Returns its path, or None when there is no open frame to blend
     (the mascot then simply flaps closed<->open)."""
-    half = PROJECT_DIR / "assets" / "mascot" / "mascot-talk-half.png"
+    half = PROJECT_DIR / "assets" / "mascot" / "raccoon-talk-half.png"
     if half.exists():
         return half
-    opened = _optional_mascot_frame("mascot-talk-open.png")
+    opened = _optional_mascot_frame("raccoon-talk-open.png")
     if opened is None:
         return None
     return half if _paint_half_mouth(_resolve_mascot(), opened, half) else None
@@ -509,7 +509,17 @@ def _scene_starts(episode: dict, words_data: dict, config: dict) -> list[float] 
         return None
     if not all(isinstance(entry, dict) for entry in timeline):
         return None
-    norm_words = [_normalize_token(w["word"]) for w in words]
+    # Keep punctuation-only timestamp tokens (for example an em dash) out of the
+    # matching stream, while preserving their original word indexes for timing.
+    # Otherwise an authored line like "got caught — and" can never match the
+    # timestamp sequence ["got", "caught", "", "and"], and every scene falls
+    # back to an equal split instead of narration-synced cuts.
+    norm_word_pairs = [
+        (index, normalized)
+        for index, word in enumerate(words)
+        if (normalized := _normalize_token(word["word"]))
+    ]
+    norm_words = [normalized for _index, normalized in norm_word_pairs]
     ordered = sorted(timeline, key=lambda entry: entry.get("scene", 0))
     starts: list[float] = []
     cursor = 0
@@ -520,7 +530,8 @@ def _scene_starts(episode: dict, words_data: dict, config: dict) -> list[float] 
         index = _find_subsequence(norm_words, head, cursor)
         if index is None:
             return None
-        starts.append(float(words[index]["start"]))
+        original_index = norm_word_pairs[index][0]
+        starts.append(float(words[original_index]["start"]))
         cursor = index + 1
     if starts != sorted(starts):  # must be non-decreasing in time
         return None
@@ -606,8 +617,9 @@ def _stage_assets(paths: EpisodePaths, config: dict) -> dict:
 
     shutil.copyfile(paths.voice_mp3, render_dir / "voice.mp3")
 
-    # Optional corner narrator. It is disabled by default; when enabled the
-    # renderer stages user-supplied sprite frames and remains null-safe.
+    # Corner narrator mascot. Since the format rework (raccoon acts INSIDE the
+    # scenes, kisahistory-style) the corner sprite is disabled by default via
+    # mascot.enable=false; the whole block is skipped and Remotion gets nulls.
     mascot_enabled = bool(config["mascot"].get("enable", True))
     mascot_src: str | None = None
     mascot_open_src: str | None = None
@@ -619,12 +631,12 @@ def _stage_assets(paths: EpisodePaths, config: dict) -> dict:
 
         # Optional talking / blink frames. Same background-knockout as the closed
         # mascot; missing files simply leave the render as a static sprite.
-        open_frame = _optional_mascot_frame("mascot-talk-open.png")
+        open_frame = _optional_mascot_frame("raccoon-talk-open.png")
         if open_frame is not None:
             _prepare_mascot(open_frame, render_dir / "mascot_open.png")
             mascot_open_src = "render/mascot_open.png"
 
-        blink_frame = _optional_mascot_frame("mascot-blink.png")
+        blink_frame = _optional_mascot_frame("raccoon-blink.png")
         if blink_frame is not None:
             _prepare_mascot(blink_frame, render_dir / "mascot_blink.png")
             mascot_blink_src = "render/mascot_blink.png"
@@ -786,8 +798,7 @@ def _render(paths: EpisodePaths, props: dict) -> Path:
         "--log=info",
     ]
     log("assemble", f"rendering -> {paths.final_mp4}")
-    env = os.environ.copy()
-    result = subprocess.run(command, cwd=str(REMOTION_DIR), env=env)
+    result = subprocess.run(command, cwd=str(REMOTION_DIR), env=os.environ.copy())
     if result.returncode != 0:
         raise RuntimeError(f"remotion render exited {result.returncode}")
     if not paths.final_mp4.exists():
@@ -979,7 +990,7 @@ def run(topic: str, episode_dir: Path, config: dict, force: bool) -> Path:
 
 
 def _parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Run the optional Agent Shorts Kit pipeline")
+    parser = argparse.ArgumentParser(description="Run the full pixel-history Shorts pipeline")
     parser.add_argument("--topic", required=True, help="episode topic / hook")
     parser.add_argument("--slug", help="episode folder name under episodes/ (default: from topic)")
     parser.add_argument("--episode", help="explicit episode directory (overrides --slug)")

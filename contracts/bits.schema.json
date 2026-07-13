@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Production Shorts visual beat plan",
+  "type": "object",
+  "required": ["meta", "world", "bits"],
+  "properties": {
+    "meta": {
+      "type": "object",
+      "required": ["slug", "title", "scene_count"],
+      "properties": {
+        "slug": {"type": "string", "minLength": 1},
+        "title": {"type": "string", "minLength": 3},
+        "scene_count": {"type": "integer", "minimum": 1, "maximum": 30},
+        "target_duration_seconds": {"type": "number", "minimum": 10, "maximum": 180},
+        "bits_dirname": {"type": "string"}
+      }
+    },
+    "world": {"type": "string", "minLength": 20},
+    "bits": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 30,
+      "items": {
+        "type": "object",
+        "required": ["n", "vo", "desc"],
+        "properties": {
+          "n": {"type": "integer", "minimum": 1},
+          "vo": {"type": "string", "minLength": 1},
+          "desc": {"type": "string", "minLength": 3},
+          "world": {"type": "string"},
+          "location": {"type": "string"},
+          "location_anchor": {"type": "boolean"},
+          "motion": {"type": "string"}
+        }
+      }
+    }
+  }
+}
+

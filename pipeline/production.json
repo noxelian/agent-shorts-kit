@@ -1,0 +1,16 @@
+{
+  "image_provider": "gemini",
+  "image_model": "gemini-3.1-flash-image",
+  "vertex": {
+    "project": "",
+    "account": "",
+    "image_location": "global",
+    "video_location": "us-central1",
+    "video_model": "veo-3.1-fast-generate-001"
+  },
+  "reference_images": [],
+  "style": "painterly SNES 16-bit pixel art, visible pixel grid, dithered gradients, rich but limited palette, soft internal shading and gentle glow, hand-placed pixel detail, clean readable silhouettes, the look of a 1994 JRPG story cutscene",
+  "reference_rule": "Create a NEW independent scene. Use reference images only for character identity, proportions, art style and palette. Do not copy their composition or camera.",
+  "negative": "No text, numbers, logos, badges, flags, depth-of-field blur, thick black outlines, photorealism, 3D rendering, watermarks or human faces unless explicitly requested."
+}
+

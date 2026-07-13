@@ -9,7 +9,7 @@ type StoryCalloutsProps = {
 const CLAMP = { extrapolateLeft: "clamp", extrapolateRight: "clamp" } as const;
 const EASE_OUT = { ...CLAMP, easing: Easing.out(Easing.cubic) } as const;
 
-// Shared caption font stack so callouts read as the same visual headline
+// Shared caption font stack so callouts read as the same pixel-history headline
 // family as the karaoke captions.
 const FONT_FAMILY = "Arial Black, Arial, sans-serif";
 const SCOREBOARD_ACCENT = "#ffe14d";
@@ -169,7 +169,7 @@ const OneCallout: React.FC<{ readonly callout: ResolvedCallout }> = ({ callout }
 };
 
 // The story-comprehension layer: big text callouts (who vs who / what just
-// happened) synced to the narration. Renders nothing when the
+// happened) synced to the narration, kisahistory-style. Renders nothing when the
 // episode authored no callouts (older episodes keep the emphasis-pops layer).
 export const StoryCallouts: React.FC<StoryCalloutsProps> = ({ callouts }) => {
   if (callouts.length === 0) {

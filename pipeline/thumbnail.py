@@ -10,7 +10,7 @@ Composition (both formats):
   2. dark gradient (bottom for vertical, left for wide) for text contrast
   3. huge bold outlined title (3-5 punchiest words from episode.json title),
      with one accent-colored word, wrapped to 2-3 lines -- crisp, never pixelated
-  4. optional knocked-out mascot in a corner with a subtle hard drop shadow
+  4. knocked-out raccoon mascot in a corner with a subtle hard drop shadow
 
 Only the scene layer is re-pixelated after cropping (cropping/scaling from the
 portrait source can soften the pixel grid); text and mascot stay crisp.
@@ -430,11 +430,11 @@ def pick_thumbnail_word(episode: dict, title_cfg: dict) -> str:
 
 
 def _mascot_reference() -> Path:
-    for name in ("mascot.png", "character.png", "raccoon-test.png", "raccoon.png"):
+    for name in ("raccoon-test.png", "raccoon.png"):
         candidate = PROJECT_DIR / "assets" / "mascot" / name
         if candidate.exists():
             return candidate
-    raise FileNotFoundError("no mascot PNG found (expected mascot.png or character.png)")
+    raise FileNotFoundError("no mascot PNG found (expected raccoon-test.png or raccoon.png)")
 
 
 def _portrait_prompt(episode: dict, portrait_cfg: dict) -> str:
