@@ -1,0 +1,78 @@
+{
+  "meta": {
+    "product": "Agent Shorts Kit",
+    "config_version": "1.0"
+  },
+  "language": "en",
+  "video": {
+    "width": 1080,
+    "height": 1920,
+    "fps": 30,
+    "scene_count": 8,
+    "crf": 23
+  },
+  "script": {
+    "target_words": 85,
+    "min_words": 65,
+    "max_words": 105
+  },
+  "voice": {
+    "engine": "edge-tts",
+    "name": "en-US-ChristopherNeural",
+    "fallback_name": "en-US-GuyNeural",
+    "rate": "+5%",
+    "pitch": "+0Hz",
+    "postfx": {"enable": true}
+  },
+  "character": {
+    "name": "",
+    "pinned_prompt": "",
+    "negative": "no text, no watermark, no logo"
+  },
+  "style": {
+    "keywords": "editorial illustration, cinematic lighting, clear focal subject",
+    "scene_prompt_template": "{scene}. {style}. no text, no watermark, vertical 9:16 composition"
+  },
+  "pixelate": {"downscale_width": 540, "palette_colors": 160},
+  "scenes_adapter": {
+    "primary": "placeholder",
+    "fallback": "placeholder",
+    "codex_bin": "codex",
+    "codex_scene_budget": 0,
+    "codex_total_timeout_seconds": 0,
+    "max_usd_per_episode": 0
+  },
+  "animate": {"enable": false},
+  "layers": {"enable": false},
+  "captions": {
+    "words_per_group": 2,
+    "font_size_px": 74,
+    "position": "bottom",
+    "bottom_offset_px": 390,
+    "top_offset_px": 150,
+    "active_color": "#ffe14d",
+    "idle_color": "#ffffff",
+    "outline_color": "#000000",
+    "outline_px": 10,
+    "min_display_frames": 5
+  },
+  "music": {
+    "enabled": false,
+    "file": "assets/music/track.mp3",
+    "narration_volume": 1.0,
+    "music_volume": 0.15,
+    "duck_no_speech": 0.3,
+    "duck_under_speech": 0.12,
+    "duck_punchline": 0.02
+  },
+  "sfx": {
+    "enable": true,
+    "master_gain": 0.3,
+    "gains": {"whoosh": 0.35, "impact": 0.6, "riser": 0.3, "blip": 0.4, "pop": 0.45}
+  },
+  "mascot": {"enable": false, "size_px": 300},
+  "thumbnail": {"enable": false},
+  "endcard": {"enable": false},
+  "motion": {"style": "smooth"}
+}
+

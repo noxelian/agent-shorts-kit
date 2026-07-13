@@ -1,0 +1,21 @@
+{
+  "name": "agent-shorts-kit-remotion",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Provider-neutral Remotion renderer for vertical Shorts.",
+  "scripts": {
+    "render": "remotion render src/index.ts Short",
+    "studio": "remotion studio src/index.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@remotion/cli": "4.0.484",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "remotion": "4.0.484"
+  },
+  "devDependencies": {
+    "@types/react": "18.3.12",
+    "typescript": "5.6.3"
+  }
+}
