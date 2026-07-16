@@ -4,7 +4,7 @@ This is a scaffold. It will NOT run until the owner creates OAuth credentials.
 Without pipeline/credentials.json it exits with a clear Russian instruction on
 exactly what to do at console.cloud.google.com.
 
-Metadata (title/description/tags) is read from the episode's episode.json.
+Metadata is read from the reviewed publish-package.json, never from a filename.
 
     python upload.py --episode ../episodes/ep001-shortest-war
     python upload.py --episode ../episodes/ep001-shortest-war --privacy public
@@ -13,9 +13,11 @@ from __future__ import annotations
 
 import argparse
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
-from common import EpisodePaths, PIPELINE_DIR, load_config, read_json
+from common import EpisodePaths, PIPELINE_DIR, load_config, read_json, write_json
+from product import release_approval_valid
 
 CREDENTIALS_PATH = PIPELINE_DIR / "credentials.json"
 TOKEN_PATH = PIPELINE_DIR / "token.json"
@@ -83,14 +85,14 @@ def _load_credentials():
     return creds
 
 
-def _build_body(episode: dict, privacy: str) -> dict:
-    hashtags = " ".join(episode.get("hashtags", []))
-    description = (episode.get("description", "") + "\n\n" + hashtags).strip()
+def _build_body(package: dict, privacy: str) -> dict:
+    hashtags = " ".join(package.get("hashtags", []))
+    description = (package.get("description", "") + "\n\n" + hashtags).strip()
     return {
         "snippet": {
-            "title": episode.get("title", "Untitled Short")[:100],
+            "title": package.get("title", "Untitled Short")[:100],
             "description": description[:4900],
-            "tags": episode.get("tags", [])[:30],
+            "tags": package.get("tags", [])[:30],
             "categoryId": "27",  # Education
         },
         "status": {
@@ -104,6 +106,13 @@ def upload(episode_dir: Path, privacy: str = "private") -> str:
     paths = EpisodePaths.for_dir(episode_dir)
     if not paths.final_mp4.exists():
         _fail(f"[upload] Нет файла для загрузки: {paths.final_mp4}. Сначала собери видео (run.py).")
+    release_ok, release_reasons = release_approval_valid(paths.root, privacy)
+    if not release_ok:
+        _fail(
+            "[upload] BLOCKED: release approval is missing or stale:\n  - "
+            + "\n  - ".join(release_reasons)
+            + "\nRun shorts.py qa, release, review the package, then approve-release."
+        )
     if not CREDENTIALS_PATH.exists():
         _fail(CREDS_HELP_RU)
 
@@ -113,10 +122,10 @@ def upload(episode_dir: Path, privacy: str = "private") -> str:
     except ImportError:
         _fail(LIBS_HELP_RU)
 
-    episode = read_json(paths.episode_json)
+    package = read_json(paths.root / "publish-package.json")
     creds = _load_credentials()
     youtube = build("youtube", "v3", credentials=creds)
-    body = _build_body(episode, privacy)
+    body = _build_body(package, privacy)
     media = MediaFileUpload(str(paths.final_mp4), chunksize=-1, resumable=True, mimetype="video/mp4")
 
     request = youtube.videos().insert(part="snippet,status", body=body, media_body=media)
@@ -124,7 +133,34 @@ def upload(episode_dir: Path, privacy: str = "private") -> str:
     while response is None:
         _status, response = request.next_chunk()
     video_id = response["id"]
-    print(f"[upload] OK https://youtu.be/{video_id} (privacy={privacy})")
+    verification = youtube.videos().list(part="snippet,status", id=video_id).execute()
+    item = (verification.get("items") or [{}])[0]
+    actual_title = (item.get("snippet") or {}).get("title")
+    actual_privacy = (item.get("status") or {}).get("privacyStatus")
+    release_status = {
+        "version": 2,
+        "uploaded_at": datetime.now(timezone.utc).isoformat(),
+        "video_id": video_id,
+        "url": f"https://youtube.com/shorts/{video_id}",
+        "requested_privacy": privacy,
+        "actual_privacy": actual_privacy,
+        "expected_title": package["title"],
+        "actual_title": actual_title,
+        "verified": actual_title == package["title"] and actual_privacy == privacy,
+        "youtube_response": item,
+    }
+    write_json(paths.root / "release-status.json", release_status)
+    if actual_title != package["title"]:
+        _fail(f"[upload] Uploaded but title verification failed: {actual_title!r}")
+    if actual_privacy != privacy:
+        _fail(
+            f"[upload] Uploaded but privacy verification failed: "
+            f"requested={privacy!r}, actual={actual_privacy!r}"
+        )
+    print(
+        f"[upload] OK https://youtube.com/shorts/{video_id} "
+        f"(requested={privacy}, actual={actual_privacy}, title={actual_title!r})"
+    )
     return video_id
 
 

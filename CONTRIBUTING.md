@@ -7,7 +7,12 @@ continuity and never weaken the human storyboard approval gate.
 Run before opening a change:
 
 ```bash
-python3 -m compileall -q shorts.py pipeline
+./.venv/bin/python -m compileall -q shorts.py pipeline tests
 npm --prefix pipeline/remotion run typecheck
-python3 -m unittest discover -s tests -v
+./.venv/bin/python -m unittest discover -s tests -v
 ```
+
+Do not commit generated episodes, credentials, tokens, private references,
+release manifests, music, or unpublished media. Changes to approvals,
+provenance, QA or upload logic must include a regression test proving stale
+inputs or artifacts remain blocked.

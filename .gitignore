@@ -11,6 +11,8 @@ pipeline/credentials.json
 pipeline/token.json
 episodes/*/
 !episodes/.gitkeep
+releases/*
+!releases/.gitkeep
 assets/music/*
 !assets/music/.gitkeep
 assets/mascot/*

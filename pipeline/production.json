@@ -1,6 +1,7 @@
 {
   "image_provider": "gemini",
   "image_model": "gemini-3.1-flash-image",
+  "image_size": "1K",
   "vertex": {
     "project": "",
     "account": "",
@@ -13,4 +14,3 @@
   "reference_rule": "Create a NEW independent scene. Use reference images only for character identity, proportions, art style and palette. Do not copy their composition or camera.",
   "negative": "No text, numbers, logos, badges, flags, depth-of-field blur, thick black outlines, photorealism, 3D rendering, watermarks or human faces unless explicitly requested."
 }
-

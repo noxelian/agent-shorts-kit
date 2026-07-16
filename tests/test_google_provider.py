@@ -36,8 +36,12 @@ class GoogleProviderTests(unittest.TestCase):
             self.assertIn("gemini-3.1-flash-image:generateContent", post.call_args.args[0])
             self.assertEqual(post.call_args.kwargs["headers"]["x-goog-api-key"], "test-key")
             self.assertEqual(
-                post.call_args.kwargs["json"]["generationConfig"]["imageConfig"]["aspectRatio"],
+                post.call_args.kwargs["json"]["generationConfig"]["responseFormat"]["image"]["aspectRatio"],
                 "9:16",
+            )
+            self.assertEqual(
+                post.call_args.kwargs["json"]["generationConfig"]["responseFormat"]["image"]["imageSize"],
+                "1K",
             )
 
 

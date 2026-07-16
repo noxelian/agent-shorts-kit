@@ -21,8 +21,18 @@ Episode directories may contain private topics, licensed assets, cloned voices,
 or unpublished videos. They are ignored by default. Add only deliberately
 cleared examples to a public fork.
 
+## Approval boundaries
+
+Storyboard and release approvals are local content-addressed workflow gates,
+not cryptographic user authentication. Run the kit only on a machine/workspace
+whose write access you control. Do not let an untrusted agent edit approval,
+build, QA or release marker files directly.
+
+The YouTube uploader requires a passing QA report, a reviewed publish package
+and a matching release approval for the requested privacy level. Keep OAuth
+credentials separate from machines used by untrusted automation.
+
 ## Reporting
 
 Open a private security advisory in the repository hosting this project. Do not
 post active credentials in a public issue.
-

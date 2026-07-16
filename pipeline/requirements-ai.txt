@@ -2,7 +2,6 @@
 
 # Optional only: built-in TTS, alignment, hosted image/video and parallax adapters.
 # The filesystem workflow in AGENTS.md does not require these packages.
-edge-tts==7.2.8
 faster-whisper==1.1.0
 fal-client==0.5.9
 rembg==2.0.76
@@ -12,4 +11,3 @@ scikit-image==0.26.0
 opencv-python-headless
 pooch
 tqdm
-

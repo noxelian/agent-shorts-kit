@@ -17,6 +17,9 @@
     "description": {"type": "string"},
     "tags": {"type": "array", "items": {"type": "string"}},
     "hashtags": {"type": "array", "items": {"type": "string", "pattern": "^#"}},
+    "sources": {"type": "array", "items": {"type": "string", "minLength": 3}},
+    "cta": {"type": "string"},
+    "pinned_comment": {"type": "string"},
     "visual_bible": {"type": "string"},
     "callouts": {"type": "array"},
     "emphasis": {"type": "array"},
@@ -24,4 +27,3 @@
   },
   "additionalProperties": true
 }
-

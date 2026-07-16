@@ -30,12 +30,16 @@ import shutil
 import subprocess
 import sys
 import time
-from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from pixelate import pixelate_image  # noqa: E402
 from common import get_env, load_env  # noqa: E402
+from product import (  # noqa: E402
+    approval_payload,
+    approval_valid as product_approval_valid,
+    validate_episode,
+)
 from PIL import Image  # noqa: E402
 import requests  # noqa: E402
 
@@ -181,9 +185,12 @@ def _board_prompt(ep: Episode) -> str:
     beats = "\n".join(f"Panel {bit['n']:02d}: {bit['desc']}" for bit in ep.bits)
     return (
         "Create ONE polished landscape 16:9 director's storyboard contact sheet for "
-        "a vertical 9:16 pixel-art YouTube Short. Use a strict "
-        f"{columns}-column by {rows}-row grid with one distinct illustration in every "
-        "panel and thin dark gutters. The panels are visual planning frames, not a comic "
+        "a vertical 9:16 pixel-art YouTube Short. Use a mathematically uniform "
+        f"{columns}-column by {rows}-row grid: exactly {columns * rows} equal-size rectangular cells, "
+        "with one distinct illustration inside every cell and thin straight dark gutters. "
+        "Never merge cells, never span an illustration across two cells, never use a masonry "
+        "layout, and never change a cell's width or height. Read the exact panel plan left to "
+        "right, then top to bottom. The panels are visual planning frames, not a comic "
         "page: keep the same recurring character, palette, location continuity and "
         "cinematic lighting across the sheet. No captions, speech bubbles, panel numbers, "
         "logos, watermarks, or readable text; layout markers will be added separately. "
@@ -228,7 +235,43 @@ def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def _require_valid_plan(ep: Episode) -> None:
+    report = validate_episode(ep.dir)
+    if not report["valid"]:
+        joined = "\n".join(f"  - {item}" for item in report["errors"])
+        raise SystemExit("Validation blocked this action:\n" + joined)
+
+
+def _sync_episode_from_bits(ep: Episode) -> None:
+    """Materialize deterministic render metadata before storyboard approval.
+
+    Install repeats this operation, so it must be byte-for-byte idempotent and
+    cannot invalidate the approval after scene generation.
+    """
+    episode_json = ep.dir / "episode.json"
+    episode = json.loads(episode_json.read_text())
+    legacy = ep.dir / "episode_legacy_backup.json"
+    if not legacy.exists():
+        shutil.copyfile(episode_json, legacy)
+    episode["scene_count"] = len(ep.bits)
+    episode["scenes"] = [bit["desc"] for bit in ep.bits]
+    episode["timeline"] = [
+        {"scene": bit["n"], "vo": bit["vo"], "visual": bit["desc"][:80]}
+        for bit in ep.bits
+    ]
+    episode.pop("hero_mode", None)
+    for key in ("title", "narration", "word_count", "callouts", "narration_tagged",
+                "description", "tags", "hashtags", "thumbnail_word", "emphasis"):
+        if ep.spec.get(key) is not None:
+            episode[key] = ep.spec[key]
+    if ep.spec.get("hero_scene"):
+        episode["hero_scene"] = ep.spec["hero_scene"]
+    episode_json.write_text(json.dumps(episode, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
 def cmd_board(ep: Episode, res: str, provider: str, force: bool) -> None:
+    _sync_episode_from_bits(ep)
+    _require_valid_plan(ep)
     if ep.board_raw.exists() and not force:
         raise SystemExit(f"Storyboard already exists: {ep.board_contact_sheet}. Review it or pass --force to replace it.")
     ep.storyboard_dir.mkdir(exist_ok=True)
@@ -251,10 +294,10 @@ def cmd_board(ep: Episode, res: str, provider: str, force: bool) -> None:
 
 
 def cmd_approve(ep: Episode) -> None:
+    _require_valid_plan(ep)
     if not ep.board_raw.exists() or not ep.board_contact_sheet.exists():
         raise SystemExit("No storyboard found. Run board first.")
-    payload = {"approved_at": datetime.now(timezone.utc).isoformat(),
-               "board_raw_sha256": _sha256(ep.board_raw), "scene_count": len(ep.bits)}
+    payload = approval_payload(ep.dir, ep.board_raw, len(ep.bits))
     ep.board_approval.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
     print("APPROVED:", ep.board_contact_sheet)
 
@@ -264,11 +307,9 @@ def _require_approved_board(ep: Episode) -> None:
         raise SystemExit("Generation blocked: run board and review the contact sheet first.")
     if not ep.board_approval.exists():
         raise SystemExit(f"Generation blocked: approve {ep.board_contact_sheet} first.")
-    approval = json.loads(ep.board_approval.read_text(encoding="utf-8"))
-    if approval.get("board_raw_sha256") != _sha256(ep.board_raw):
-        raise SystemExit("Generation blocked: storyboard changed after approval; review and approve it again.")
-    if approval.get("scene_count") != len(ep.bits):
-        raise SystemExit("Generation blocked: scene count changed after approval; regenerate and approve the board.")
+    valid, reasons = product_approval_valid(ep.dir)
+    if not valid:
+        raise SystemExit("Generation blocked: " + "; ".join(reasons))
 
 
 # ---------------------------------------------------------------- gen
@@ -322,20 +363,24 @@ def _google_generate_image(prompt: str, ref_paths: list[Path], dst: Path,
                            provider: str, aspect_ratio: str = "9:16") -> None:
     """Generate with Gemini 3.1 Flash Image via API key or Vertex gcloud auth."""
     model = str(PRODUCTION.get("image_model", "gemini-3.1-flash-image"))
+    image_size = str(PRODUCTION.get("image_size", "1K"))
     body = {
         "contents": [{"role": "user", "parts": _google_parts(prompt, ref_paths)}],
-        "generationConfig": {
-            "responseModalities": ["TEXT", "IMAGE"],
-            "imageConfig": {"aspectRatio": aspect_ratio},
-        },
+        "generationConfig": {"responseModalities": ["TEXT", "IMAGE"]},
     }
     if provider == "gemini":
         key = get_env("GEMINI_API_KEY") or get_env("GOOGLE_API_KEY")
         if not key:
             raise RuntimeError("Gemini provider needs GEMINI_API_KEY in pipeline/.env")
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+        # Stable v1 GenerateContent shape. The image response format is the
+        # current documented replacement for the older imageConfig field.
+        body["generationConfig"]["responseFormat"] = {
+            "image": {"aspectRatio": aspect_ratio, "imageSize": image_size}
+        }
+        url = f"https://generativelanguage.googleapis.com/v1/models/{model}:generateContent"
         headers = {"x-goog-api-key": key}
     elif provider == "vertex":
+        body["generationConfig"]["imageConfig"] = {"aspectRatio": aspect_ratio}
         project, _account, image_location, _video_location = _vertex_settings()
         url = (f"https://aiplatform.googleapis.com/v1/projects/{project}/locations/"
                f"{image_location}/publishers/google/models/{model}:generateContent")
@@ -480,23 +525,7 @@ def cmd_install(ep: Episode) -> None:
         thumb.save(ep.dir / "out/thumb_portrait_base_raw.png")
         print("thumb portrait installed")
 
-    episode_json = ep.dir / "episode.json"
-    episode = json.loads(episode_json.read_text())
-    legacy = ep.dir / "episode_legacy_backup.json"
-    if not legacy.exists():
-        shutil.copyfile(episode_json, legacy)
-    episode["scene_count"] = len(ep.bits)
-    episode["scenes"] = [b["desc"] for b in ep.bits]
-    episode["timeline"] = [{"scene": b["n"], "vo": b["vo"], "visual": b["desc"][:80]}
-                           for b in ep.bits]
-    episode.pop("hero_mode", None)
-    for key in ("title", "narration", "word_count", "callouts", "narration_tagged",
-                "description", "tags", "hashtags", "thumbnail_word", "emphasis"):
-        if ep.spec.get(key) is not None:
-            episode[key] = ep.spec[key]
-    if ep.spec.get("hero_scene"):
-        episode["hero_scene"] = ep.spec["hero_scene"]
-    episode_json.write_text(json.dumps(episode, ensure_ascii=False, indent=2))
+    _sync_episode_from_bits(ep)
     print("episode.json updated: scene_count", len(ep.bits))
 
     for name in ("voice.mp3", "voice.prefx.mp3", "words.json", "voice.el.raw.json",
