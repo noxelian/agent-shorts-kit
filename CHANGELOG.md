@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.2.1 — 2026-07-16
+
+- Fixed the clean Python 3.11 install by selecting the latest compatible NumPy
+  line with environment markers.
+
 ## v0.2.0 — 2026-07-16
 
 - Added schema-backed preflight validation that blocks placeholders, narration
